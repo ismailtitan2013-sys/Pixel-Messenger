@@ -762,16 +762,36 @@ export default function App() {
     try {
       await addDoc(collection(db, 'messages'), finalPayload);
 
-      // Check if message is for AI Assistant
-      const text = payload.text || '';
-      const textLower = text.trim().toLowerCase();
-      const isAiTrigger = textLower.startsWith('@ai') || textLower.startsWith('ии,') || textLower.startsWith('@ии') || textLower.startsWith('ai,');
+      // Check if message is for AI Assistant with mixed keyboard layout normalization
+      const text = (payload.text || '').trim();
+      const textLower = text.toLowerCase();
+
+      // Normalize lookalike Cyrillic characters (e.g. Cyrillic 'а' -> Latin 'a')
+      const normalizedText = textLower
+        .replace(/а/g, 'a')
+        .replace(/с/g, 'c')
+        .replace(/е/g, 'e')
+        .replace(/о/g, 'o')
+        .replace(/р/g, 'p')
+        .replace(/х/g, 'x');
+
+      const isAiTrigger =
+        normalizedText.startsWith('@ai') ||
+        normalizedText.startsWith('@bot') ||
+        textLower.startsWith('@ии') ||
+        textLower.startsWith('@бот') ||
+        textLower.startsWith('ии,') ||
+        textLower.startsWith('ai,');
+
       let aiPrompt = '';
       if (isAiTrigger) {
-        if (textLower.startsWith('@ai')) aiPrompt = text.substring(3).trim();
+        if (normalizedText.startsWith('@ai')) aiPrompt = text.substring(3).trim();
+        else if (normalizedText.startsWith('@bot')) aiPrompt = text.substring(4).trim();
         else if (textLower.startsWith('@ии')) aiPrompt = text.substring(3).trim();
+        else if (textLower.startsWith('@бот')) aiPrompt = text.substring(5).trim();
         else if (textLower.startsWith('ии,')) aiPrompt = text.substring(3).trim();
         else if (textLower.startsWith('ai,')) aiPrompt = text.substring(3).trim();
+        else aiPrompt = text.replace(/^[@а-яa-z,]+/, '').trim();
       }
 
       if (isAiTrigger) {
@@ -798,14 +818,14 @@ export default function App() {
         if (!aiReply) {
           // Smart offline fallback response generator if API key is not set or request failed
           const lowerPrompt = promptText.toLowerCase();
-          if (lowerPrompt.includes('привет') || lowerPrompt.includes('здравствуй') || lowerPrompt.includes('хай')) {
+          if (lowerPrompt.includes('привет') || lowerPrompt.includes('здравствуй') || lowerPrompt.includes('хай') || lowerPrompt.includes('hello') || lowerPrompt.includes('hi')) {
             aiReply = 'Привет! 👋 Я ваш ИИ-Помощник в Pixel Messenger. Чем могу помочь? ✨';
           } else if (lowerPrompt.includes('кто ты') || lowerPrompt.includes('создатель') || lowerPrompt.includes('кто тебя создал')) {
-            aiReply = 'Я крутой ИИ-Помощник Pixel Messenger! 🤖 Мой создатель — легендарный Milky VIP 👑';
+            aiReply = 'Я умный ИИ-Помощник Pixel Messenger! 🤖 Мой создатель — легендарный Milky VIP 👑';
           } else if (lowerPrompt.includes('как дела')) {
             aiReply = 'У меня всё отлично, работаю на 100% мощности! ⚡ А как твои дела?';
           } else {
-            aiReply = `🤖 Я получил твой запрос: "${promptText}". Напиши в АДМИН-панели свой ключ Gemini API, чтобы разблокировать мои сверхспособности! 🚀`;
+            aiReply = `🤖 Я умный ИИ-Помощник! Твой запрос: "${promptText}". Укажи ключ Gemini API в АДМИН-панели для полной генерации ответов! 🚀`;
           }
         }
 
