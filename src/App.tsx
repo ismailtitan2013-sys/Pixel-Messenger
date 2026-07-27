@@ -1607,6 +1607,33 @@ export default function App() {
                     <div>{data.text}</div>
                   )}
 
+                  {/* Emoji Reactions display */}
+                  {data.reactions && Object.keys(data.reactions).length > 0 && (
+                    <div className="reactions-row" style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginTop: '6px' }}>
+                      {Object.entries(
+                        Object.values(data.reactions).reduce((acc: Record<string, number>, em: string) => {
+                          acc[em] = (acc[em] || 0) + 1;
+                          return acc;
+                        }, {})
+                      ).map(([em, count]) => (
+                        <span
+                          key={em}
+                          style={{
+                            background: 'rgba(255,255,255,0.2)',
+                            borderRadius: '12px',
+                            padding: '2px 8px',
+                            fontSize: '0.78rem',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '3px'
+                          }}
+                        >
+                          {em} {count}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
                   {/* Message Time and Status */}
                   <div className="msg-time-status">
                     <span>{timeStr}</span>
@@ -1615,6 +1642,23 @@ export default function App() {
 
                   {/* Hover Popup Actions */}
                   <div className="msg-actions-popup">
+                    {['👍', '❤️', '🔥', '😂', '😮'].map((em) => (
+                      <button
+                        key={em}
+                        className="msg-action-btn"
+                        onClick={async () => {
+                          try {
+                            await updateDoc(doc(db, 'messages', data.id), {
+                              [`reactions.${myUsername}`]: em
+                            });
+                          } catch (e) {
+                            console.error(e);
+                          }
+                        }}
+                      >
+                        {em}
+                      </button>
+                    ))}
                     <button
                       className="msg-action-btn"
                       onClick={() => setReplyingToMessage({ text: data.text || 'Медиа' })}
