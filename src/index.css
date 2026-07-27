@@ -69,6 +69,89 @@
   transition: background 0.25s ease, color 0.25s ease, border 0.25s ease, transform 0.2s ease, opacity 0.2s ease;
 }
 
+/* Glassmorphism Panel */
+.glass-panel,
+.auth-box,
+.chat-header,
+.dialog-item,
+#right-column,
+#left-column {
+  background: var(--glass);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: var(--glass-border) !important;
+  box-shadow: var(--shadow);
+}
+
+/* Skeleton Loading */
+@keyframes skeleton-pulse {
+  0%   { background-color: rgba(150, 150, 150, 0.1); }
+  50%  { background-color: rgba(150, 150, 150, 0.2); }
+  100% { background-color: rgba(150, 150, 150, 0.1); }
+}
+.skeleton {
+  border-radius: 8px;
+  animation: skeleton-pulse 1.6s ease-in-out infinite;
+}
+.skel-text {
+  height: 0.9rem;
+  margin: 4px 0;
+}
+.skel-circle {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+}
+
+/* Ripple-effect */
+.ripple {
+  position: relative;
+  overflow: hidden;
+}
+.ripple::after {
+  content: "";
+  position: absolute;
+  top: 50%; left: 50%;
+  width: 0; height: 0;
+  background: rgba(255,255,255,.3);
+  border-radius: 50%;
+  transform: translate(-50%,-50%);
+  transition: width .4s ease-out, height .4s ease-out;
+}
+.ripple:active::after {
+  width: 200px;
+  height: 200px;
+}
+
+/* Hover-animations */
+.dialog-item,
+.auth-box,
+.chat-header,
+.message {
+  transition: transform .12s ease, box-shadow .12s ease;
+}
+.dialog-item:hover,
+.auth-box:hover,
+.chat-header:hover,
+.message:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--text-secondary);
+  border-radius: 4px;
+}
+
+
+
 body {
   background-color: var(--bg-color);
   color: var(--text-color);

@@ -1382,15 +1382,16 @@ export default function App() {
       {/* MAIN TWO-COLUMN APP CONTAINER */}
       <div id="app-container">
         {/* LEFT COLUMN */}
-        <div id="left-column" className={selectedUser ? 'hidden-mobile' : ''}>
+        <div id="left-column" className={`glass-panel ${selectedUser ? 'hidden-mobile' : ''}`}>
           <div className="sidebar-top-bar">
-            <button className="menu-burger-btn" onClick={openProfileModal} title="Профиль">
+            <button className="menu-burger-btn ripple" onClick={openProfileModal} title="Профиль">
               <i className="fas fa-bars" />
             </button>
 
             {/* EXCLUSIVE ADMIN PANEL BUTTON FOR MILKYVIP */}
             {isMilkyVip && (
               <button
+                className="ripple"
                 onClick={() => setIsAdminOpen(true)}
                 style={{
                   background: 'linear-gradient(135deg, #f59e0b, #d97706)',
