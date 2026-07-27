@@ -134,8 +134,51 @@ export default function App() {
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
 
+  // WebRTC state
+  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
+  const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
+  const localVideoRef = useRef<HTMLVideoElement>(null);
+  const remoteVideoRef = useRef<HTMLVideoElement>(null);
+  const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
+
+  const rtcConfig = {
+    iceServers: [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' }
+    ]
+  };
+
+  useEffect(() => {
+    if (localVideoRef.current && localStream) {
+      localVideoRef.current.srcObject = localStream;
+    }
+  }, [localStream, currentCall]);
+
+  useEffect(() => {
+    if (remoteVideoRef.current && remoteStream) {
+      remoteVideoRef.current.srcObject = remoteStream;
+    }
+  }, [remoteStream, currentCall]);
+
+  const cleanupCall = () => {
+    if (localStream) {
+      localStream.getTracks().forEach((track) => track.stop());
+    }
+    if (peerConnectionRef.current) {
+      peerConnectionRef.current.close();
+      peerConnectionRef.current = null;
+    }
+    setLocalStream(null);
+    setRemoteStream(null);
+    setCurrentCall(null);
+    setCallDuration(0);
+    setIsMuted(false);
+    setIsVideoOff(false);
+  };
+
   // Typing state
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
+  const [usersProfiles, setUsersProfiles] = useState<Record<string, UserProfile>>({});
 
   const chatBoxRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -405,19 +448,41 @@ export default function App() {
         const callObj = { id: docSnap.id, ...data };
 
         if ((data.caller === myUsername || data.receiver === myUsername) && data.status !== 'ended' && data.status !== 'declined') {
-          setCurrentCall(callObj);
+          setCurrentCall(prev => {
+             if (data.caller === myUsername && data.answer && peerConnectionRef.current && peerConnectionRef.current.signalingState !== 'stable') {
+                peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(data.answer)).catch(console.error);
+             }
+             return callObj;
+          });
           if (data.status === 'calling' && data.receiver === myUsername) {
             playRingtoneSound();
           }
         } else if (currentCall && currentCall.id === docSnap.id && (data.status === 'ended' || data.status === 'declined')) {
-          setCurrentCall(null);
-          setCallDuration(0);
+          cleanupCall();
         }
       });
     });
 
     return () => unsubscribe();
   }, [myUsername, currentCall]);
+
+  // Handle remote ICE candidates
+  useEffect(() => {
+    if (!currentCall || !peerConnectionRef.current) return;
+    const isCaller = currentCall.caller === myUsername;
+    const candidatesCollection = isCaller ? 'calleeCandidates' : 'callerCandidates';
+    
+    const unsubscribe = onSnapshot(collection(db, 'calls', currentCall.id, candidatesCollection), (snapshot) => {
+      snapshot.docChanges().forEach((change) => {
+        if (change.type === 'added') {
+          const candidate = new RTCIceCandidate(change.doc.data());
+          peerConnectionRef.current?.addIceCandidate(candidate).catch(console.error);
+        }
+      });
+    });
+    
+    return () => unsubscribe();
+  }, [currentCall, myUsername]);
 
   // --- Call Timer Counter ---
   useEffect(() => {
@@ -438,6 +503,23 @@ export default function App() {
       chatBoxRef.current.scrollTop = chatBoxRef.current.scrollHeight;
     }
   }, [messages, currentChatRoom]);
+
+  // Handle Mute & Video Toggles
+  useEffect(() => {
+    if (localStream) {
+      localStream.getAudioTracks().forEach(track => {
+        track.enabled = !isMuted;
+      });
+    }
+  }, [isMuted, localStream]);
+
+  useEffect(() => {
+    if (localStream) {
+      localStream.getVideoTracks().forEach(track => {
+        track.enabled = !isVideoOff;
+      });
+    }
+  }, [isVideoOff, localStream]);
 
   // --- Realtime Typing Indicator Listener ---
   useEffect(() => {
@@ -527,14 +609,38 @@ export default function App() {
     if (!selectedUser || !currentChatRoom || !myUsername) return alert('Выберите собеседника');
 
     try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: type === 'video' });
+      setLocalStream(stream);
+
+      const pc = new RTCPeerConnection(rtcConfig);
+      peerConnectionRef.current = pc;
+
+      stream.getTracks().forEach((track) => {
+        pc.addTrack(track, stream);
+      });
+
+      pc.ontrack = (event) => {
+        setRemoteStream(event.streams[0]);
+      };
+
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+
       const callRef = await addDoc(collection(db, 'calls'), {
         room: currentChatRoom,
         caller: myUsername,
         receiver: selectedUser.username,
         type,
         status: 'calling',
+        offer: { type: offer.type, sdp: offer.sdp },
         createdAt: serverTimestamp()
       });
+
+      pc.onicecandidate = (event) => {
+        if (event.candidate) {
+          addDoc(collection(db, 'calls', callRef.id, 'callerCandidates'), event.candidate.toJSON());
+        }
+      };
 
       setCurrentCall({
         id: callRef.id,
@@ -552,7 +658,38 @@ export default function App() {
   const handleAcceptCall = async () => {
     if (!currentCall) return;
     try {
-      await updateDoc(doc(db, 'calls', currentCall.id), { status: 'accepted' });
+      const callDocSnap = await getDoc(doc(db, 'calls', currentCall.id));
+      const callData = callDocSnap.data();
+      if (!callData || !callData.offer) return alert('Ошибка соединения');
+
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: currentCall.type === 'video' });
+      setLocalStream(stream);
+
+      const pc = new RTCPeerConnection(rtcConfig);
+      peerConnectionRef.current = pc;
+
+      stream.getTracks().forEach((track) => {
+        pc.addTrack(track, stream);
+      });
+
+      pc.ontrack = (event) => {
+        setRemoteStream(event.streams[0]);
+      };
+
+      pc.onicecandidate = (event) => {
+        if (event.candidate) {
+          addDoc(collection(db, 'calls', currentCall.id, 'calleeCandidates'), event.candidate.toJSON());
+        }
+      };
+
+      await pc.setRemoteDescription(new RTCSessionDescription(callData.offer));
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+
+      await updateDoc(doc(db, 'calls', currentCall.id), { 
+        status: 'accepted',
+        answer: { type: answer.type, sdp: answer.sdp }
+      });
       setCurrentCall({ ...currentCall, status: 'accepted' });
     } catch (e) {
       console.error(e);
@@ -563,7 +700,7 @@ export default function App() {
     if (!currentCall) return;
     try {
       await updateDoc(doc(db, 'calls', currentCall.id), { status: 'declined' });
-      setCurrentCall(null);
+      cleanupCall();
     } catch (e) {
       console.error(e);
     }
@@ -574,17 +711,14 @@ export default function App() {
     try {
       await updateDoc(doc(db, 'calls', currentCall.id), { status: 'ended' });
 
-      // Log call in chat
       if (currentChatRoom) {
         const formatSecs = `${Math.floor(callDuration / 60)}:${(callDuration % 60).toString().padStart(2, '0')}`;
         await sendMessage({
-          text: `📞 ${currentCall.type === 'video' ? 'Видеозвонок' : 'Голосовой звонок'} (${callDuration > 0 ? `Длительность: ${formatSecs}` : 'Звонок завершен'
-            })`
+          text: `📞 ${currentCall.type === 'video' ? 'Видеозвонок' : 'Голосовой звонок'} (${callDuration > 0 ? 'Длительность: ' + formatSecs : 'Звонок завершен'})`
         });
       }
 
-      setCurrentCall(null);
-      setCallDuration(0);
+      cleanupCall();
     } catch (e) {
       console.error(e);
     }
@@ -606,14 +740,15 @@ export default function App() {
     };
 
     if (replyingToMessage) {
-      msgData.replyTo = replyingToMessage.text;
+      finalPayload.replyTo = replyingToMessage.text;
       setReplyingToMessage(null);
     }
 
     try {
-      if (audioUrl) msgData.audioUrl = audioUrl;
+      await addDoc(collection(db, 'messages'), finalPayload);
 
       // Check if message is for AI Assistant
+      const text = payload.text || '';
       const textLower = text.trim().toLowerCase();
       const isAiTrigger = textLower.startsWith('@ai') || textLower.startsWith('ии,') || textLower.startsWith('@ии') || textLower.startsWith('ai,');
       let aiPrompt = '';
@@ -624,11 +759,10 @@ export default function App() {
         else if (textLower.startsWith('ai,')) aiPrompt = text.substring(3).trim();
       }
 
-      await addDoc(collection(db, 'messages'), msgData);
-
       if (isAiTrigger) {
         if (!geminiKey) {
           await addDoc(collection(db, 'messages'), {
+            room: currentChatRoom,
             text: '⚠️ У вас не настроен API-ключ Gemini! Зайдите в 👑 АДМИН панель и укажите ключ, чтобы ИИ заработал.',
             createdAt: serverTimestamp(),
             username: 'ИИ Помощник 🤖',
@@ -647,6 +781,7 @@ export default function App() {
             const data = await res.json();
             const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || 'Извините, я не понял запрос.';
             await addDoc(collection(db, 'messages'), {
+              room: currentChatRoom,
               text: reply,
               createdAt: serverTimestamp(),
               username: 'ИИ Помощник 🤖',
@@ -654,6 +789,7 @@ export default function App() {
             });
           } catch (e) {
             await addDoc(collection(db, 'messages'), {
+              room: currentChatRoom,
               text: '❌ Ошибка при обращении к ИИ. Проверьте правильность API ключа.',
               createdAt: serverTimestamp(),
               username: 'ИИ Помощник 🤖',
@@ -903,6 +1039,24 @@ export default function App() {
               )}
             </h3>
           </div>
+
+          {currentCall.status === 'accepted' && currentCall.type === 'video' && (
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', marginBottom: '20px' }}>
+              <video 
+                ref={localVideoRef} 
+                autoPlay 
+                playsInline 
+                muted 
+                style={{ width: '150px', height: '150px', borderRadius: '12px', objectFit: 'cover', background: '#000', transform: 'scaleX(-1)' }} 
+              />
+              <video 
+                ref={remoteVideoRef} 
+                autoPlay 
+                playsInline 
+                style={{ width: '150px', height: '150px', borderRadius: '12px', objectFit: 'cover', background: '#000' }} 
+              />
+            </div>
+          )}
 
           <div style={{ display: 'flex', gap: '20px', marginBottom: '20px' }}>
             {currentCall.status === 'calling' && currentCall.receiver === myUsername ? (
