@@ -670,12 +670,14 @@ export default function App() {
   const handleAcceptCall = async () => {
     if (!currentCall) return;
     try {
-      const callDocSnap = await getDoc(doc(db, 'calls', currentCall.id));
-      const callData = callDocSnap.data();
-      if (!callData || !callData.offer) return alert('Ошибка соединения');
-
+      // 1. Get media stream FIRST to preserve user gesture context on iOS Safari
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: currentCall.type === 'video' });
       setLocalStream(stream);
+
+      // 2. Fetch offer data from Firestore
+      const callDocSnap = await getDoc(doc(db, 'calls', currentCall.id));
+      const callData = callDocSnap.data();
+      if (!callData || !callData.offer) return alert('Ошибка соединения: звонок завершен');
 
       const pc = new RTCPeerConnection(rtcConfig);
       peerConnectionRef.current = pc;
@@ -703,8 +705,9 @@ export default function App() {
         answer: { type: answer.type, sdp: answer.sdp }
       });
       setCurrentCall({ ...currentCall, status: 'accepted' });
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
+      alert('Не удалось принять звонок: ' + (e.message || 'Ошибка разрешения микрофона'));
     }
   };
 
@@ -1359,7 +1362,7 @@ export default function App() {
       {/* MAIN TWO-COLUMN APP CONTAINER */}
       <div id="app-container">
         {/* LEFT COLUMN */}
-        <div id="left-column">
+        <div id="left-column" className={selectedUser ? 'hidden-mobile' : ''}>
           <div className="sidebar-top-bar">
             <button className="menu-burger-btn" onClick={openProfileModal} title="Профиль">
               <i className="fas fa-bars" />
@@ -1408,7 +1411,7 @@ export default function App() {
               </div>
             ) : (
               filteredUsers.map((uName) => {
-                const uData = usersProfiles[uName] || {};
+                const uData = usersProfiles[uName] || { username: uName };
                 const members = [myUsername, uName].sort();
                 const roomId = `pm_${members[0]}_${members[1]}`;
                 const dispName = uData.displayName || uName;
@@ -1474,10 +1477,17 @@ export default function App() {
         </div>
 
         {/* RIGHT COLUMN (CHAT AREA) */}
-        <div id="right-column">
+        <div id="right-column" className={!selectedUser ? 'hidden-mobile' : ''}>
           {/* CHAT HEADER */}
           <div className="chat-header">
             <div className="chat-header-left">
+              <button
+                className="mobile-back-btn"
+                onClick={() => setSelectedUser(null)}
+                title="Назад к чатам"
+              >
+                <i className="fas fa-chevron-left" />
+              </button>
               <img
                 className="chat-header-avatar"
                 src={selectedUser?.avatar || 'https://via.placeholder.com/150'}
