@@ -96,8 +96,14 @@ export default function App() {
   const [usernameInput, setUsernameInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
 
-  const [usersProfiles, setUsersProfiles] = useState<Record<string, UserProfile>>({});
   const [currentChatRoom, setCurrentChatRoom] = useState<string | null>(null);
+  const [geminiKey, setGeminiKey] = useState(() => {
+    try {
+      return localStorage.getItem('geminiKey') || '';
+    } catch {
+      return '';
+    }
+  });
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
 
   const [messages, setMessages] = useState<Message[]>([]);
@@ -600,14 +606,64 @@ export default function App() {
     };
 
     if (replyingToMessage) {
-      finalPayload.replyTo = replyingToMessage.text;
+      msgData.replyTo = replyingToMessage.text;
       setReplyingToMessage(null);
     }
 
     try {
-      await addDoc(collection(db, 'messages'), finalPayload);
-    } catch (err: any) {
-      console.error('Error sending message', err);
+      if (audioUrl) msgData.audioUrl = audioUrl;
+
+      // Check if message is for AI Assistant
+      const textLower = text.trim().toLowerCase();
+      const isAiTrigger = textLower.startsWith('@ai') || textLower.startsWith('ии,') || textLower.startsWith('@ии') || textLower.startsWith('ai,');
+      let aiPrompt = '';
+      if (isAiTrigger) {
+        if (textLower.startsWith('@ai')) aiPrompt = text.substring(3).trim();
+        else if (textLower.startsWith('@ии')) aiPrompt = text.substring(3).trim();
+        else if (textLower.startsWith('ии,')) aiPrompt = text.substring(3).trim();
+        else if (textLower.startsWith('ai,')) aiPrompt = text.substring(3).trim();
+      }
+
+      await addDoc(collection(db, 'messages'), msgData);
+
+      if (isAiTrigger) {
+        if (!geminiKey) {
+          await addDoc(collection(db, 'messages'), {
+            text: '⚠️ У вас не настроен API-ключ Gemini! Зайдите в 👑 АДМИН панель и укажите ключ, чтобы ИИ заработал.',
+            createdAt: serverTimestamp(),
+            username: 'ИИ Помощник 🤖',
+            isVip: true
+          });
+        } else {
+          try {
+            const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                contents: [{ parts: [{ text: aiPrompt || 'Привет, ИИ!' }] }],
+                systemInstruction: { parts: [{ text: 'Ты дружелюбный и крутой ИИ-помощник в мессенджере Pixel Messenger. Твой создатель - Milky VIP. Отвечай кратко, используй эмодзи.' }] }
+              })
+            });
+            const data = await res.json();
+            const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || 'Извините, я не понял запрос.';
+            await addDoc(collection(db, 'messages'), {
+              text: reply,
+              createdAt: serverTimestamp(),
+              username: 'ИИ Помощник 🤖',
+              isVip: true
+            });
+          } catch (e) {
+            await addDoc(collection(db, 'messages'), {
+              text: '❌ Ошибка при обращении к ИИ. Проверьте правильность API ключа.',
+              createdAt: serverTimestamp(),
+              username: 'ИИ Помощник 🤖',
+              isVip: true
+            });
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error sending message: ', error);
     }
   };
 
@@ -945,6 +1001,39 @@ export default function App() {
                   />
                   <button className="admin-action-btn admin-btn-broadcast" onClick={handleSendBroadcast}>
                     <i className="fas fa-paper-plane" /> Опубликовать
+                  </button>
+                </div>
+              </div>
+
+              {/* AI SETTINGS */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '16px', background: 'var(--input-bg)', borderRadius: '16px' }}>
+                <h4 style={{ fontSize: '0.95rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <i className="fas fa-robot" style={{ color: '#a855f7' }} /> Настройки ИИ-Помощника (Gemini)
+                </h4>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                  Чтобы бот работал по вызову <code>@ai</code>, введите бесплатный API-ключ от Google Gemini.
+                </div>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <input
+                    type="password"
+                    placeholder="AIzaSy..."
+                    value={geminiKey}
+                    onChange={(e) => {
+                      setGeminiKey(e.target.value);
+                      localStorage.setItem('geminiKey', e.target.value);
+                    }}
+                    style={{
+                      flex: 1,
+                      padding: '10px 14px',
+                      borderRadius: '12px',
+                      border: '1px solid var(--input-border)',
+                      background: 'var(--card-bg)',
+                      color: 'var(--text-color)',
+                      outline: 'none'
+                    }}
+                  />
+                  <button className="admin-action-btn admin-btn-unban" onClick={() => alert('Ключ ИИ успешно сохранен!')}>
+                    <i className="fas fa-save" /> Сохранить
                   </button>
                 </div>
               </div>
