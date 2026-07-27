@@ -1,0 +1,6 @@
+{
+  "name": "NEXUS Messenger",
+  "description": "NEXUS Messenger — современный премиальный мессенджер нового поколения с поддержкой голосовых и видеозвонков, голосовых сообщений, темной и светлой темы и VIP-функций.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
