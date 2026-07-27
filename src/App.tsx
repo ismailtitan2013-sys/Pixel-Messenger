@@ -139,12 +139,16 @@ export default function App() {
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
+  const remoteAudioRef = useRef<HTMLAudioElement>(null);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
 
   const rtcConfig = {
     iceServers: [
       { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' }
+      { urls: 'stun:stun1.l.google.com:19302' },
+      { urls: 'stun:stun2.l.google.com:19302' },
+      { urls: 'stun:stun.services.mozilla.com' },
+      { urls: 'stun:global.stun.twilio.com:3478' }
     ]
   };
 
@@ -157,8 +161,16 @@ export default function App() {
   useEffect(() => {
     if (remoteVideoRef.current && remoteStream) {
       remoteVideoRef.current.srcObject = remoteStream;
+      remoteVideoRef.current.play().catch((e) => console.log('Video play error:', e));
     }
   }, [remoteStream, currentCall]);
+
+  useEffect(() => {
+    if (remoteAudioRef.current && remoteStream) {
+      remoteAudioRef.current.srcObject = remoteStream;
+      remoteAudioRef.current.play().catch((e) => console.log('Audio play error:', e));
+    }
+  }, [remoteStream]);
 
   const cleanupCall = () => {
     if (localStream) {
@@ -1000,6 +1012,7 @@ export default function App() {
       {/* ACTIVE CALL MODAL / OVERLAY */}
       {currentCall && (
         <div id="call-modal">
+          <audio ref={remoteAudioRef} autoPlay playsInline style={{ display: 'none' }} />
           <div style={{ textAlign: 'center', marginTop: '20px' }}>
             <h2 style={{ fontSize: '1.8rem', fontWeight: 700 }}>
               {currentCall.type === 'video' ? '📹 Видеозвонок' : '📞 Голосовой звонок'}

@@ -1077,3 +1077,42 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(100, 116, 139, 0.4);
 }
+
+/* MOBILE RESPONSIVE OPTIMIZATIONS */
+input, textarea, select {
+  font-size: 16px !important; /* Prevents auto-zoom on mobile browsers */
+}
+
+@media (max-width: 768px) {
+  #left-column {
+    width: 100% !important;
+    min-width: 100% !important;
+  }
+
+  .chat-input-container {
+    padding: 10px 12px;
+    gap: 8px;
+  }
+
+  .chat-text-input {
+    font-size: 16px !important;
+    padding: 10px 14px;
+  }
+
+  .auth-box {
+    width: 92% !important;
+    padding: 24px 18px !important;
+    margin: 0 12px;
+  }
+
+  .call-btn-circle {
+    width: 68px !important;
+    height: 68px !important;
+    font-size: 1.6rem !important;
+  }
+
+  #call-modal {
+    padding: 60px 20px 40px 20px !important;
+  }
+}
+
