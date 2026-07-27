@@ -5,10 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>Pixel Messenger</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    <script type="module" crossorigin src="./assets/index-CKXw8zNj.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-BJgw-w8m.css">
   </head>
   <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+    <div id="root"></div>
+    <script>
+      window.onerror = function(msg, url, line) { 
+        document.body.innerHTML += '<div style="color:red;font-size:18px;padding:20px;position:absolute;top:0;left:0;z-index:99999;background:white">' + msg + '<br/>' + url + ':' + line + '</div>'; 
+      }; 
+      window.onunhandledrejection = function(e) { 
+        document.body.innerHTML += '<div style="color:red;font-size:18px;padding:20px;position:absolute;top:0;left:0;z-index:99999;background:white">Promise Rejection:<br/>' + (e.reason && e.reason.message ? e.reason.message : e.reason) + '</div>'; 
+      };
+    </script>
   </body>
 </html>
 
