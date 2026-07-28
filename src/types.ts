@@ -17,6 +17,10 @@ export interface Message {
   text?: string;
   image?: string;
   audio?: string;
+  fileUrl?: string;
+  fileName?: string;
+  fileSize?: number;
+  fileType?: string;
   replyTo?: string;
   isVip?: boolean;
   isEdited?: boolean;

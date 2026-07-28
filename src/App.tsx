@@ -109,6 +109,7 @@ export default function App() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [messageText, setMessageText] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [isLoadingChats, setIsLoadingChats] = useState(true);
 
   const [replyingToMessage, setReplyingToMessage] = useState<{ text: string } | null>(null);
   const [editingMessage, setEditingMessage] = useState<Message | null>(null);
@@ -447,6 +448,7 @@ export default function App() {
         loaded.push({ id: docSnap.id, ...docSnap.data() } as Message);
       });
       setMessages(loaded);
+      setIsLoadingChats(false);
     });
 
     return () => unsubscribe();
@@ -923,7 +925,6 @@ export default function App() {
     }
   };
 
-  // --- Image File Upload ---
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (isCurrentBanned) return alert('Ваш аккаунт заблокирован');
     const file = e.target.files?.[0];
@@ -934,6 +935,35 @@ export default function App() {
       } catch (err) {
         alert('Ошибка загрузки изображения');
       }
+    }
+  };
+
+  // --- Document / General File Upload ---
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (isCurrentBanned) return alert('Ваш аккаунт заблокирован');
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    // Check size limit for Firestore base64 (~700KB max to be safe)
+    if (file.size > 700 * 1024) {
+      return alert('Файл слишком большой! Максимальный размер 700 KB.');
+    }
+
+    try {
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        if (event.target?.result) {
+          await sendMessage({
+            fileUrl: event.target.result as string,
+            fileName: file.name,
+            fileSize: file.size,
+            fileType: file.type || 'application/octet-stream'
+          });
+        }
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      alert('Ошибка прикрепления файла');
     }
   };
 
@@ -1443,9 +1473,20 @@ export default function App() {
           </div>
 
           <div className="dialogs-list" id="dialogs-list">
-            {filteredUsers.length === 0 ? (
+            {isLoadingChats ? (
+              // SKELETON LOADING UI
+              Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="dialog-item">
+                  <div className="skeleton skel-circle" style={{ flexShrink: 0 }}></div>
+                  <div style={{ flex: 1 }}>
+                    <div className="skeleton skel-text" style={{ width: '60%' }}></div>
+                    <div className="skeleton skel-text" style={{ width: '80%', opacity: 0.7 }}></div>
+                  </div>
+                </div>
+              ))
+            ) : filteredUsers.length === 0 ? (
               <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-secondary)' }}>
-                {otherUsers.length === 0 ? 'Загрузка или нет пользователей...' : 'Чаты не найдены'}
+                {otherUsers.length === 0 ? 'Нет пользователей...' : 'Чаты не найдены'}
               </div>
             ) : (
               filteredUsers.map((uName) => {
@@ -1621,6 +1662,19 @@ export default function App() {
                     />
                   ) : data.audio ? (
                     <VoicePlayer url={data.audio} id={data.id} />
+                  ) : data.fileUrl ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'rgba(0,0,0,0.05)', padding: '10px', borderRadius: '12px', border: '1px solid rgba(0,0,0,0.1)' }}>
+                      <div style={{ width: '40px', height: '40px', background: 'var(--accent-color)', color: 'white', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem' }}>
+                        <i className={`fas ${data.fileType?.includes('video') ? 'fa-video' : data.fileType?.includes('pdf') ? 'fa-file-pdf' : data.fileName?.endsWith('.zip') ? 'fa-file-archive' : 'fa-file-alt'}`} />
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
+                        <span style={{ fontWeight: 600, fontSize: '0.9rem', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>{data.fileName}</span>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{(data.fileSize! / 1024).toFixed(1)} KB</span>
+                      </div>
+                      <a href={data.fileUrl} download={data.fileName} style={{ color: 'var(--accent-color)', textDecoration: 'none', padding: '8px', cursor: 'pointer' }} title="Скачать">
+                        <i className="fas fa-download" />
+                      </a>
+                    </div>
                   ) : (
                     <div>{data.text}</div>
                   )}
@@ -1757,8 +1811,13 @@ export default function App() {
             </button>
 
             <label className="input-icon-btn" title="Прикрепить фото">
-              <i className="fas fa-paperclip" />
+              <i className="fas fa-image" />
               <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handleImageUpload} />
+            </label>
+
+            <label className="input-icon-btn" title="Прикрепить документ (PDF, ZIP, Video)">
+              <i className="fas fa-paperclip" />
+              <input type="file" accept="*/*" style={{ display: 'none' }} onChange={handleFileUpload} />
             </label>
 
             <textarea
