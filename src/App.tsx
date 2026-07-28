@@ -111,7 +111,8 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
 
   const [replyingToMessage, setReplyingToMessage] = useState<{ text: string } | null>(null);
-  const [pinnedMessage, setPinnedMessage] = useState<string | null>(null);
+  const [editingMessage, setEditingMessage] = useState<Message | null>(null);
+  const [isAiMenuOpen, setIsAiMenuOpen] = useState(false);
 
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [profileEditName, setProfileEditName] = useState('');
@@ -122,6 +123,7 @@ export default function App() {
   // Admin VIP Panel state
   const [isAdminOpen, setIsAdminOpen] = useState(false);
   const [broadcastText, setBroadcastText] = useState('');
+  const [pinnedMessage, setPinnedMessage] = useState<string | null>(null);
 
   // Recording voice state
   const [isRecording, setIsRecording] = useState(false);
@@ -840,6 +842,21 @@ export default function App() {
     } catch (error) {
       console.error('Error sending message: ', error);
     }
+  };
+
+  const handleAiAction = (action: 'fix' | 'translate' | 'summarize') => {
+    if (!messageText.trim()) return alert('Введите текст для ИИ');
+    let newText = messageText;
+    if (action === 'fix') {
+      newText = newText.charAt(0).toUpperCase() + newText.slice(1) + (newText.endsWith('.') ? '' : '.');
+      // Simple mock for grammar
+    } else if (action === 'translate') {
+      newText = '[ENG] ' + newText; // Mock translation
+    } else if (action === 'summarize') {
+      newText = newText.substring(0, 20) + '... (Кратко)'; // Mock summarization
+    }
+    setMessageText(newText);
+    setIsAiMenuOpen(false);
   };
 
   const handleSendText = async () => {
@@ -1710,7 +1727,35 @@ export default function App() {
           )}
 
           {/* INPUT AREA */}
-          <div className="chat-input-area">
+          <div className="chat-input-container" style={{ position: 'relative' }}>
+            
+            {/* AI MENU */}
+            {isAiMenuOpen && (
+              <div style={{
+                position: 'absolute', bottom: '70px', left: '20px', background: 'var(--card-bg)',
+                borderRadius: '16px', padding: '12px', boxShadow: '0 10px 40px rgba(0,0,0,0.2)',
+                display: 'flex', flexDirection: 'column', gap: '8px', zIndex: 100,
+                border: '1px solid var(--glass-border)', backdropFilter: 'blur(20px)'
+              }}>
+                <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--accent-color)', marginBottom: '4px' }}>
+                  <i className="fas fa-sparkles" /> AI Ассистент
+                </div>
+                <button onClick={() => handleAiAction('fix')} style={{ background: 'var(--input-bg)', border: 'none', padding: '8px 12px', borderRadius: '8px', color: 'var(--text-color)', cursor: 'pointer', textAlign: 'left', fontSize: '0.9rem' }}>
+                  <i className="fas fa-magic" /> Исправить ошибки
+                </button>
+                <button onClick={() => handleAiAction('translate')} style={{ background: 'var(--input-bg)', border: 'none', padding: '8px 12px', borderRadius: '8px', color: 'var(--text-color)', cursor: 'pointer', textAlign: 'left', fontSize: '0.9rem' }}>
+                  <i className="fas fa-language" /> Перевести текст
+                </button>
+                <button onClick={() => handleAiAction('summarize')} style={{ background: 'var(--input-bg)', border: 'none', padding: '8px 12px', borderRadius: '8px', color: 'var(--text-color)', cursor: 'pointer', textAlign: 'left', fontSize: '0.9rem' }}>
+                  <i className="fas fa-compress-alt" /> Сократить текст
+                </button>
+              </div>
+            )}
+
+            <button className="input-icon-btn" onClick={() => setIsAiMenuOpen(!isAiMenuOpen)} title="AI Ассистент" style={{ color: isAiMenuOpen ? 'var(--accent-color)' : '' }}>
+              <i className="fas fa-sparkles" />
+            </button>
+
             <label className="input-icon-btn" title="Прикрепить фото">
               <i className="fas fa-paperclip" />
               <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handleImageUpload} />
@@ -1734,7 +1779,7 @@ export default function App() {
             />
 
             <button
-              className="dynamic-send-btn"
+              className="input-action-btn"
               style={{ background: isRecording ? '#ef4444' : undefined }}
               onClick={() => {
                 if (messageText.trim().length > 0) {
